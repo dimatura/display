@@ -402,6 +402,8 @@ ImagePane.prototype = extend(Object.create(Pane.prototype), {
     c.style.top = '';
     c.style.width ='';
     c.style.height = '';
+    this.width = c.naturalWidth;
+    this.height = c.naturalHeight;
     this.resizeLabels();
     this.scale = Math.min(el.offsetWidth / c.naturalWidth, el.offsetHeight / c.naturalHeight);
   },
