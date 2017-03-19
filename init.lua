@@ -35,6 +35,13 @@ local function send(command)
 end
 
 
+local function pane(type, win, title, content)
+  win = win or uid()
+  send({ command='pane', type=type, id=win, title=title, content=content })
+  return win
+end
+
+
 local function normalize(img, opts)
   -- rescale image to 0 .. 1
   local min = opts.min or img:min()
@@ -45,11 +52,22 @@ local function normalize(img, opts)
   return img
 end
 
+-- Set the URL of the listening server
+function M.configure(config)
+  local port = config.port or 8000
+  local hostname = config.hostname or '127.0.0.1'
+  M.url = 'http://' .. hostname .. ':' .. port ..'/events'
+end
 
 function M.image(img, opts)
+
+  local defaultType = torch.getdefaulttensortype()
+  -- the image package expects this to be DoubleTensor 
+  -- if CudaTensor then clampImage from package image will attempt to index field 'image' (a nil value) of the CudaTensor
+  torch.setdefaulttensortype('torch.DoubleTensor') 
+
   -- options:
   opts = opts or {}
-  local win = opts.win or uid()      -- id of the window to be reused
 
   if type(img) == 'table' then
     return M.images(img, opts)
@@ -70,9 +88,9 @@ function M.image(img, opts)
   local inmem_img = image.compressJPG(img)
   local imgdata = 'data:image/jpg;base64,' .. mime.b64(ffi.string(inmem_img:data(), inmem_img:nElement()))
 
+  torch.setdefaulttensortype(defaultType)
 
-  send({ command='image', id=win, src=imgdata, labels=opts._labels, width=opts.width, title=opts.title })
-  return win
+  return pane('image', opts.win, opts.title, { src=imgdata, labels=opts._labels, width=opts.width })
 end
 
 
@@ -125,7 +143,6 @@ end
 -- See http://dygraphs.com/options.html for supported options
 function M.plot(data, opts)
   opts = opts or {}
-  local win = opts.win or uid()
 
   local dataset = {}
   if torch.typename(data) then
@@ -154,21 +171,17 @@ function M.plot(data, opts)
   -- Don't pass our options to dygraphs. 'title' is ok
   options.win = nil
 
-  send({ command='plot', id=win, title=opts.title, options=options })
-  return win
+  return pane('plot', opts.win, opts.title, options)
 end
 
-function M.text(txt, opts)
+function M.text(text, opts)
   opts = opts or {}
-  local win = opts.win or uid()
 
-  send({ command='text', id=win, title=opts.title, text=txt })
-  return win
+  return pane('text', opts.win, opts.title, text)
 end
 
 function M.audio(data, opts)
   opts = opts or {}
-  local win = opts.win or uid()
 
   if not pcall(require, 'audio') then
       print("Warning: audio package could not be loaded. Skipping audio.")
@@ -232,8 +245,7 @@ function M.audio(data, opts)
 
   local audio_data = 'data:audio/' .. ext .. ';base64,'
      .. mime.b64(ffi.string(torch.data(buf), size))
-  send({ command='audio', id=win, title=opts.title, data=audio_data })
-  return win
+  return pane('audio', opts.win, opts.title, audio_data)
 end
 
 
